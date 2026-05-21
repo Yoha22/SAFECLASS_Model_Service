@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  safeclass-model-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: safeclass-model-service:latest
+    container_name: safeclass-model-service
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    restart: unless-stopped
+    # No volumes: the model weights are baked into the image at build time.
+    # To update the model, replace safeclass_best.pt and rebuild:
+    #   docker compose build --no-cache
+    #   docker compose up -d
