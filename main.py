@@ -31,8 +31,11 @@ from schemas import (
     StreamStopRequest,
     ThresholdUpdateRequest,
     ThresholdUpdateResponse,
+    VideoAnalyzeResponse,
+    VideoStatusResponse,
 )
 from video_capture import capture_manager
+from video_processor import video_job_manager
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -286,6 +289,61 @@ async def stream_stop(
         camera_id=body.camera_id,
         message=f"Stop requested for camera '{body.camera_id}'.",
     )
+
+
+@app.post(
+    "/video/analyze",
+    response_model=VideoAnalyzeResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Analyze a video file for anomalies",
+    tags=["video"],
+)
+async def video_analyze(
+    camera_id: str = File(..., description="Camera UUID to associate detections with"),
+    video: UploadFile = File(..., description="Video file (mp4, avi, mov, etc.)"),
+    _: None = Depends(verify_api_key),
+) -> VideoAnalyzeResponse:
+    """
+    Accepts a video file and a camera_id.
+    Processes the video asynchronously frame by frame using the same YOLOv8
+    pipeline as live RTSP streams, then forwards each detection to the backend
+    via POST /api/internal/alert.
+    Returns immediately with a job_id; poll /video/status/{job_id} for progress.
+    """
+    video_bytes = await video.read()
+    if not video_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El archivo de video está vacío.",
+        )
+
+    job_id = video_job_manager.submit(camera_id, video_bytes)
+    return VideoAnalyzeResponse(
+        job_id=job_id,
+        camera_id=camera_id,
+        status="pending",
+        message=f"Análisis iniciado. Consulta el estado en /video/status/{job_id}",
+    )
+
+
+@app.get(
+    "/video/status/{job_id}",
+    response_model=VideoStatusResponse,
+    summary="Get video analysis job status",
+    tags=["video"],
+)
+async def video_status(
+    job_id: str,
+    _: None = Depends(verify_api_key),
+) -> VideoStatusResponse:
+    """Returns the current progress and results of a video analysis job."""
+    job_status_data = video_job_manager.get_status(job_id)
+    if job_status_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job '{job_id}' no encontrado.",
+        )
+    return VideoStatusResponse(**job_status_data)
 
 
 @app.put(

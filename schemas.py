@@ -89,3 +89,29 @@ class StreamActionResponse(BaseModel):
 class ThresholdUpdateResponse(BaseModel):
     threshold: float
     warning:   Optional[str] = None
+
+
+# ── Video analysis ────────────────────────────────────────────────────────────
+
+class VideoJobStatus(str, Enum):
+    PENDING    = "pending"
+    PROCESSING = "processing"
+    COMPLETED  = "completed"
+    FAILED     = "failed"
+
+
+class VideoAnalyzeResponse(BaseModel):
+    job_id:    str
+    camera_id: str
+    status:    str
+    message:   str
+
+
+class VideoStatusResponse(BaseModel):
+    job_id:           str
+    status:           VideoJobStatus
+    progress:         float         # 0–100
+    frames_processed: int
+    total_frames:     int
+    alerts_sent:      int
+    error:            Optional[str] = None
